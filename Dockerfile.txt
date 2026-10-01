@@ -1,0 +1,14 @@
+FROM python:3.10-slim
+
+# System level par ffmpeg install karna zaroori hai video processing ke liye
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /code
+
+COPY ./requirements.txt /code/requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+
+COPY . .
+
+# Hugging Face Spaces port 7860 use karta hai
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

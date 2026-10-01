@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto DubAI - Free Video Dubbing</title>
+    <script src="https://tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="max-w-md w-full bg-gray-800 p-6 rounded-xl shadow-2xl text-center">
+        <h1 class="text-3xl font-bold mb-2 text-indigo-400">🤖 Auto DubAI</h1>
+        <p class="text-gray-400 mb-6 text-sm">Upload a Reel/Short (Max 60s) to automatically dub it via AI!</p>
+
+        <!-- Drag and Drop Box -->
+        <div id="drop-zone" class="border-2 border-dashed border-gray-600 rounded-lg p-8 cursor-pointer hover:border-indigo-500 transition-colors mb-4">
+            <p id="drop-text" class="text-gray-300">Drag & Drop your video here or <span class="text-indigo-400 underline">Browse</span></p>
+            <input type="file" id="file-input" class="hidden" accept="video/mp4">
+        </div>
+
+        <button id="dub-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg hidden transition-all">
+            🎬 Auto Dub Now
+        </button>
+
+        <!-- Processing Loader -->
+        <div id="loader" class="hidden my-6">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto mb-3"></div>
+            <p class="text-sm text-gray-400">AI is listening and dubbing your video... Please wait.</p>
+            <div class="mt-4 bg-gray-700 h-20 flex items-center justify-center rounded text-xs text-gray-500">[Google AdSense Space Holder]</div>
+        </div>
+
+        <!-- Result Screen -->
+        <div id="result-container" class="hidden mt-6">
+            <h3 class="text-lg font-semibold text-green-400 mb-3">Ready! Your Video is Dubbed 🎉</h3>
+            <video id="video-player" class="w-full rounded-lg mb-4" controls></video>
+            <a id="download-btn" class="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg text-center" download="dubbed_video.mp4">
+                📥 Download Dubbed Video
+            </a>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const dropText = document.getElementById('drop-text');
+        const dubBtn = document.getElementById('dub-btn');
+        const loader = document.getElementById('loader');
+        const resultContainer = document.getElementById('result-container');
+        const videoPlayer = document.getElementById('video-player');
+        const downloadBtn = document.getElementById('download-btn');
+        let selectedFile = null;
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => { e.preventDefault(); dropZone.classList.add('border-indigo-500'); }, false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => { e.preventDefault(); dropZone.classList.remove('border-indigo-500'); }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            selectedFile = e.dataTransfer.files[0];
+            handleFileSelection();
+        });
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            selectedFile = e.target.files[0];
+            handleFileSelection();
+        });
+
+        function handleFileSelection() {
+            if (selectedFile) {
+                dropText.innerText = `Selected: ${selectedFile.name}`;
+                dubBtn.classList.remove('hidden');
+                resultContainer.classList.add('hidden');
+            }
+        }
+
+        dubBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            dubBtn.classList.add('hidden');
+            dropZone.classList.add('hidden');
+            loader.classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                const response = await fetch('/dub', { method: 'POST', body: formData });
+                
+                if (response.status === 403) {
+                    const errorData = await response.json();
+                    alert(errorData.message); 
+                    loader.classList.add('hidden');
+                    dropZone.classList.remove('hidden');
+                    return;
+                }
+
+                if (!response.ok) throw new Error('Processing failed');
+                
+                const blob = await response.blob();
+                const videoUrl = URL.createObjectURL(blob);
+                
+                videoPlayer.src = videoUrl;
+                downloadBtn.href = videoUrl;
+                
+                loader.classList.add('hidden');
+                resultContainer.classList.remove('hidden');
+            } catch (err) {
+                alert('Error processing video. Make sure file is valid.');
+                dropZone.classList.remove('hidden');
+                dubBtn.classList.remove('hidden');
+                loader.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

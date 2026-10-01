@@ -1,0 +1,76 @@
+import os
+import subprocess
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+import whisper
+from gtts import gTTS
+
+app = FastAPI()
+
+# Global level par Whisper model load ho raha hai
+model = whisper.load_model("tiny")
+
+# Function jo check karega video kitne seconds ki hai
+def get_video_duration(file_path):
+    try:
+        cmd = f"ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nocut=1 {file_path}"
+        output = subprocess.check_output(cmd, shell=True).decode().strip()
+        return float(output)
+    except Exception:
+        return 0.0
+
+@app.get("/")
+async def get_index():
+    with open("index.html", "r") as f:
+        return HTMLResponse(content=f.read(), status_code=200)
+
+@app.post("/dub")
+async def dub_video(file: UploadFile = File(...)):
+    os.makedirs("/tmp/dubbing", exist_ok=True)
+    input_path = "/tmp/dubbing/input.mp4"
+    audio_path = "/tmp/dubbing/audio.wav"
+    dubbed_audio_path = "/tmp/dubbing/dubbed.mp3"
+    output_path = "/tmp/dubbing/output.mp4"
+    
+    # Old files clean up
+    for p in [input_path, audio_path, dubbed_audio_path, output_path]:
+        if os.path.exists(p): os.remove(p)
+
+    # User ki video ko temporary save karein
+    with open(input_path, "wb") as f:
+        f.write(await file.read())
+        
+    # 🔍 DURATION CHECK LOGIC
+    duration = get_video_duration(input_path)
+    print(f"🎬 Uploaded video duration: {duration} seconds")
+    
+    # Agar video 60 seconds (1 minute) se badi hai toh block kar do
+    if duration > 60.0:
+        if os.path.exists(input_path): os.remove(input_path)
+        return JSONResponse(
+            status_code=403,
+            content={"status": "premium_required", "message": "⭐ Premium Feature! Upgrade to Pro to dub long videos."}
+        )
+        
+    try:
+        # Step 1: Extract Audio using FFmpeg
+        subprocess.run(["ffmpeg", "-i", input_path, "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audio_path], check=True)
+        
+        # Step 2: Whisper AI automatic sunega (Transcription)
+        result = model.transcribe(audio_path)
+        original_text = result["text"]
+        
+        if not original_text.strip():
+            original_text = "Hello, welcome to this video."
+            
+        # Step 3: Text-to-Speech (Hindi Output)
+        tts = gTTS(text=original_text, lang='hi', slow=False)
+        tts.save(dubbed_audio_path)
+        
+        # Step 4: Merge New Audio and Video using FFmpeg
+        subprocess.run(["ffmpeg", "-i", input_path, "-i", dubbed_audio_path, "-c:v", "copy", "-map", "0:v:0", "-map", "1:a:0", "-shortest", output_path], check=True)
+        
+        return FileResponse(output_path, media_type="video/mp4", filename="dubbed_output.mp4")
+        
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
